@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><AssemblyName>pcl-patcher</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include="../PclPatcher.Core/PclPatcher.Core.csproj" /></ItemGroup></Project>

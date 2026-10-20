@@ -1,0 +1,34 @@
+name: Official binary compatibility
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python scripts/fetch-official.py
+      - run: dotnet test -c Release --logger trx --results-directory .artifacts/test-results
+      - run: dotnet run --project src/PclPatcher.Cli -c Release -- patch .artifacts/official/PCL-2.99.0.0.exe --donor .artifacts/official/PCL-2.14.0.0.exe
+      - run: python scripts/verify-il.py .artifacts/official/PCL-2.99.0.0.exe.pclpatcher.original .artifacts/official/PCL-2.99.0.0.exe
+      - name: Load and JIT restored methods on .NET Framework
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/verify-clr.ps1 -Executable .artifacts/official/PCL-2.99.0.0.exe -ReferenceDirectory .artifacts/ilverify/references
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-${{ matrix.os }}
+          path: |
+            .artifacts/test-results
+            .artifacts/ilverify/*.txt
+            .artifacts/ilverify/summary.json
