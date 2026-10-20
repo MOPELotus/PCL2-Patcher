@@ -29,7 +29,8 @@ Windows：解压到可写目录，双击“一键修补.cmd”或 pcl-patcher.ex
 手动处理其他 EXE：pcl-patcher.exe --help
 恢复：pcl-patcher.exe restore "PCL2-Patched/Plain Craft Launcher 2.exe"
 
-成功恢复并验证的是五处 IL 功能代码；尚无 GUI、真实下载/整合包安装、微软登录端到端验收。
+v0.1.0 已于 2026-10-20 获得用户本机验证，用户确认可以正常工作。
+七种整合包格式、版本修改及微软登录的逐项测试结果尚未单独记录；详细验证范围见仓库报告。
 原作者：龙腾猫跃。官方仓库：https://github.com/Meloong-Git/PCL
 工具源码、验证报告：https://github.com/MOPELotus/PCL2-Patcher
 '''
