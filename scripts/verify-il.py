@@ -22,6 +22,12 @@ framework = pathlib.Path(nuget) / 'microsoft.netframework.referenceassemblies.ne
 reference_args = []
 for reference in sorted([*framework.glob('*.dll'), *framework.glob('Facades/*.dll'), *refs.glob('*.dll')]):
     reference_args += ['-r', str(reference.resolve())]
+# Hundreds of long NuGet paths exceed Windows CreateProcess's 32K command-line limit.
+# ILVerify's System.CommandLine parser supports response files; keep paths quoted and
+# use forward slashes so backslashes cannot be interpreted as response-file escapes.
+response = a.output / 'references.rsp'
+response.write_text('\n'.join('"' + value.replace('\\', '/').replace('"', '\\"') + '"' for value in reference_args) + '\n', encoding='utf-8')
+reference_args = ['@' + str(response.resolve())]
 if not (framework / 'mscorlib.dll').exists():
     raise RuntimeError('Missing .NET Framework 4.8 reference assemblies')
 pattern = '(PageDownloadInstall.*LoaderInit|ModModpack.*ModpackInstall|PageDownloadResourceDetail.*InitializeStackResourceVersions|PageDownloadModify.*LoadInstanceFinished)'
