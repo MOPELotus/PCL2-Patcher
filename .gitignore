@@ -4,3 +4,7 @@
 *.user
 *.bak
 *.tmp
+__pycache__/
+*.pyc
+pcl-patcher-logs/
+PCL2-Patched/

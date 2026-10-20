@@ -20,9 +20,10 @@ public static class PatchEngine
         new("minecraft-version-modify", "PCL.PageDownloadModify", "LoadInstanceFinished", 1)
     ];
 
-    public static PatchPlan Plan(ModuleDef target, ModuleDef donor, bool apply = false)
+    public static PatchPlan Plan(ModuleDef target, ModuleDef donor, bool apply = false, Action<string>? log = null)
     {
         CheckModule(target); CheckModule(donor);
+        log?.Invoke($"[analysis] target={target.Assembly.FullName}; donor={donor.Assembly.FullName}; ILOnly={target.IsILOnly}; strongName={target.IsStrongNameSigned}");
         // Check external assembly identities before importing generic/member signatures.
         var targetRefs = target.GetAssemblyRefs().Select(r => r.FullName).ToHashSet();
         if (donor.GetAssemblyRefs().Any(r => !targetRefs.Contains(r.FullName)))
@@ -42,6 +43,7 @@ public static class PatchEngine
             var expected = Il.Fingerprint(d, true);
             if (Il.Fingerprint(t, true) == expected)
             {
+                log?.Invoke($"[feature] {r.Feature}: already restored; method={t.FullName}; IL={t.Body.Instructions.Count}; references validated");
                 features.Add(new(r.Feature, t.FullName, "restored")); continue;
             }
             CilBody restored;
@@ -62,6 +64,7 @@ public static class PatchEngine
             }
             var check = new MethodDefUser(t.Name, t.MethodSig, t.ImplAttributes, t.Attributes) { Body = restored };
             Il.Validate(check);
+            log?.Invoke($"[feature] {r.Feature}: compatible restriction confirmed; method={t.FullName}; IL {t.Body.Instructions.Count} -> {restored.Instructions.Count}; control flow, EH and dependency checks passed");
             changes.Add((t, restored));
             features.Add(new(r.Feature, t.FullName, "restricted"));
         }
@@ -77,6 +80,7 @@ public static class PatchEngine
         }
         var state = changes.Count == 0 ? "restored" : changes.Count == Recipes.Length ? "restricted" : "partial";
         if (apply) foreach (var (method, body) in changes) method.Body = body;
+        log?.Invoke($"[analysis] state={state}; recognizedFeatures={features.Count}; methodsToChange={changes.Count}; apply={apply}");
         return new(new(target.Assembly.Version.ToString(), state, features), changes.Select(c => c.Target).ToArray());
     }
 

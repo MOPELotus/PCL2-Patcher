@@ -20,10 +20,22 @@ jobs:
       - run: dotnet test -c Release --logger trx --results-directory .artifacts/test-results
       - run: dotnet run --project src/PclPatcher.Cli -c Release -- patch .artifacts/official/PCL-2.99.0.0.exe --donor .artifacts/official/PCL-2.14.0.0.exe
       - run: python scripts/verify-il.py .artifacts/official/PCL-2.99.0.0.exe.pclpatcher.original .artifacts/official/PCL-2.99.0.0.exe
+      - name: Automatic download and patch smoke test
+        run: dotnet run --project src/PclPatcher.Cli -c Release -- auto --output .artifacts/one-click-smoke
+      - name: Repeat automatic workflow
+        run: dotnet run --project src/PclPatcher.Cli -c Release -- auto --output .artifacts/one-click-smoke
+      - name: Build and run portable Windows executable
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          dotnet publish src/PclPatcher.Cli -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .artifacts/portable-win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./.artifacts/portable-win/pcl-patcher.exe auto --output .artifacts/portable-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Load and JIT restored methods on .NET Framework
         if: runner.os == 'Windows'
         shell: powershell
-        run: ./scripts/verify-clr.ps1 -Executable .artifacts/official/PCL-2.99.0.0.exe -ReferenceDirectory .artifacts/ilverify/references
+        run: ./scripts/verify-clr.ps1 -Executable ".artifacts/portable-smoke/Plain Craft Launcher 2.exe" -ReferenceDirectory .artifacts/ilverify/references
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -32,3 +44,12 @@ jobs:
             .artifacts/test-results
             .artifacts/ilverify/*.txt
             .artifacts/ilverify/summary.json
+            .artifacts/one-click-smoke/logs
+            .artifacts/portable-smoke/logs
+            pcl-patcher-logs
+      - name: Upload tested portable executable
+        uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && success()
+        with:
+          name: portable-windows
+          path: .artifacts/portable-win/pcl-patcher.exe

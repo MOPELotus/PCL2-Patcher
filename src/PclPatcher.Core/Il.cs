@@ -44,15 +44,35 @@ public static class Il
             Parameter p => "arg:" + p.Index,
             MethodDef d when semanticLambdas && d.Name.String.StartsWith("_Lambda$", StringComparison.Ordinal) && depth < 5 =>
                 d.DeclaringType.FullName + "::lambda:" + d.MethodSig + ":" + Hash(Encoding.UTF8.GetBytes(Fingerprint(d, true, depth + 1))),
+            IMethod method when method.MethodSig != null => method.FullName + Scope(method.DeclaringType.DefinitionAssembly) + Signature(method.MethodSig),
+            IField field when field.FieldSig != null => field.FullName + Scope(field.DeclaringType.DefinitionAssembly) + TypeIdentity(field.FieldSig.Type),
+            TypeSpec type => TypeIdentity(type.TypeSig),
+            IType type => type.FullName + Scope(type.DefinitionAssembly),
             IFullName n => n.FullName,
             string s => Convert.ToBase64String(Encoding.UTF8.GetBytes(s)),
             IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
             _ => o.ToString() ?? ""
         };
-        return $"init:{m.Body.InitLocals};locals:{string.Join(';', normalized.Body.Variables.Select(v => v.Type.FullName))}\n" +
+        return $"signature:{Signature(m.MethodSig)};init:{m.Body.InitLocals};locals:{string.Join(';', normalized.Body.Variables.Select(v => TypeIdentity(v.Type)))}\n" +
                string.Join('\n', meaningful.Select(i => i.OpCode.Name + " " + Operand(i.Operand))) + "\nEH\n" +
                string.Join('\n', normalized.Body.ExceptionHandlers.Select(e => $"{e.HandlerType}:{Position(e.TryStart)}:{Position(e.TryEnd)}:{Position(e.HandlerStart)}:{Position(e.HandlerEnd)}:{Position(e.FilterStart)}:{e.CatchType?.FullName}"));
     }
+    private static string TypeIdentity(TypeSig? type) => type switch
+    {
+        null => "none",
+        GenericVar variable => "!" + variable.Number,
+        GenericMVar variable => "!!" + variable.Number,
+        GenericInstSig generic => generic.GenericType.FullName + Scope(generic.DefinitionAssembly) + "<" + string.Join(',', generic.GenericArguments.Select(TypeIdentity)) + ">",
+        ArraySig array => $"Array[{array.Rank};{string.Join(',', array.Sizes)};{string.Join(',', array.LowerBounds)}]({TypeIdentity(array.Next)})",
+        NonLeafSig wrapper => wrapper.ElementType + "(" + TypeIdentity(wrapper.Next) + ")",
+        FnPtrSig pointer => pointer.Signature is MethodSig method ? Signature(method) : pointer.FullName,
+        _ => type.FullName + Scope(type.DefinitionAssembly)
+    };
+    private static string Signature(MethodSig signature) =>
+        $"{signature.CallingConvention}:{signature.GenParamCount}:{TypeIdentity(signature.RetType)}({string.Join(',', signature.Params.Select(TypeIdentity))})" +
+        (signature.ParamsAfterSentinel == null ? "" : "..." + string.Join(',', signature.ParamsAfterSentinel.Select(TypeIdentity)));
+    private static string Scope(IAssembly? assembly) => " [" +
+        (assembly?.Name == "Plain Craft Launcher 2" ? "<target-pcl>" : assembly?.FullName ?? "no-assembly") + "]";
     public static string Hash(byte[] data) => Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
 
     public static CilBody Clone(MethodDef source, MethodDef destination, Importer? importer = null)
@@ -71,7 +91,7 @@ public static class Il
                 Local l => body.Variables[l.Index],
                 Parameter p => destination.Parameters[p.Index],
                 ITypeDefOrRef t when importer != null => importer.Value.Import(t),
-                IMethod method when importer != null => importer.Value.Import(method),
+                IMethod method when importer != null && method.MethodSig != null => importer.Value.Import(method),
                 IField field when importer != null => importer.Value.Import(field),
                 MethodSig sig when importer != null => importer.Value.Import(sig),
                 _ => i.Operand

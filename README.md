@@ -4,6 +4,21 @@
 
 **当前实测目标是官方 2.99.0.0。五处功能代码已恢复并通过实际 EXE 的 IL 验证；尚未完成 Windows 图形界面、真实下载/安装和微软登录的端到端操作验证。** 后续版本只有通过结构校验才允许修补，不能保证兼容所有未来版本。详细证据见 [验证报告](docs/validation.md) 和 [二进制调查](docs/research.md)。
 
+## 一键式工具包（推荐）
+
+前往 [GitHub Releases](https://github.com/MOPELotus/PCL2-Patcher/releases/latest)，下载 Windows x64 ZIP，解压到可写目录后双击 **一键修补.cmd** 或 **pcl-patcher.exe**。独立 EXE 已包含 .NET 运行时；不需要安装 SDK、Python 或配置命令行。
+
+零参数运行会自动完成：下载固定官方版本 → 校验来源与 SHA-256 → 备份 → 恢复五处 IL → 重新加载与校验。首次需要联网；再次运行会复用通过校验的官方缓存，并识别已有补丁。不会自动启动 PCL。
+
+结果位于工具旁的 `PCL2-Patched/Plain Craft Launcher 2.exe`。详细 UTF-8 日志位于 `PCL2-Patched/logs/`，记录下载 URL、官方提交、文件大小和 SHA-256、每个方法的匹配与 IL 数量、引用/控制流/异常区域检查、写后完整性检查、备份与恢复记录路径，以及失败时的完整异常。控制台会保留结果供查看。
+
+备份和恢复记录与结果 EXE 同目录，原始下载缓存位于 `PCL2-Patched/.official/`。未知已有文件不会被覆盖。可指定输出位置：
+
+```sh
+pcl-patcher.exe auto --output "D:/PCL2-Patched"
+pcl-patcher.exe --help
+```
+
 ## 构建与使用
 
 构建需要 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。补丁工具可在 Windows / Linux 上处理 EXE；PCL2 本身需要 Windows / .NET Framework 4.8。
@@ -36,7 +51,7 @@ dotnet run --project src/PclPatcher.Cli -c Release -- verify PCL.exe --donor .ar
 dotnet run --project src/PclPatcher.Cli -c Release -- restore PCL.exe
 ```
 
-`check` 返回 `restricted`（五处均受限）、`partial`（部分已恢复）或 `restored`（五处均为可识别的无限制实现）。`restored` 也包括原本不受限的兼容官方旧版，不等同于本工具曾处理过该文件。结构不兼容时返回错误，不写入。重复执行 `patch` 不会再次改写已经恢复的 EXE。CLI 输出 JSON，退出码：0 成功；2 结构/完整性错误；3 文件或网络错误；64 参数错误。`check` 成功检测到受限也返回 0。
+`check` 返回 `restricted`（五处均受限）、`partial`（部分已恢复）或 `restored`（五处均为可识别的无限制实现）。`restored` 也包括原本不受限的兼容官方旧版，不等同于本工具曾处理过该文件。结构不兼容时返回错误，不写入。重复执行 `patch` 不会再次改写已经恢复的 EXE。手动 CLI 的 stdout 输出 JSON，stderr 和 `pcl-patcher-logs/` 保存详细进度。退出码：0 成功；1 未预期异常；2 结构/完整性错误；3 文件或网络错误；64 参数错误。`check` 成功检测到受限也返回 0。
 
 修补时在 EXE 同目录保留：
 
@@ -100,3 +115,5 @@ dotnet publish src/PclPatcher.Cli -c Release -r win-x64 --self-contained true -p
 运行输出目录中的 `pcl-patcher.exe`，子命令与上述示例相同，不再需要 `dotnet run --project … --`。不启用 trimming，以保留 dnlib 的完整元数据处理能力。发布目录不包含官方 PCL EXE；使用 `fetch` 获取。
 
 原作者为龙腾猫跃，官方项目：[Meloong-Git/PCL](https://github.com/Meloong-Git/PCL)，[官方主页与赞助入口](https://meloong.com/PCL)。本工具不代表官方，也不提供或分发 Minecraft 游戏文件。官方程序集及其资源的权利和许可属于各自权利人；本仓库不提交官方/修补后的 EXE 或从中反编译的方法体。
+
+构建一键式发行包：`python scripts/package-release.py --version 0.1.0`。输出 Windows ZIP、独立 EXE、Linux tar.gz 和 SHA256SUMS.txt 到 `.artifacts/release/v0.1.0/`。发布不包含官方或修补后的 PCL EXE，这些由工具运行时从官方固定提交下载。

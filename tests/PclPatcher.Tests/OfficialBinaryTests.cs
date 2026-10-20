@@ -51,7 +51,7 @@ public sealed class OfficialBinaryTests : IDisposable
         var changed = Il.Methods(before).Where(m => Il.Fingerprint(m) != Il.Fingerprint(Il.Methods(after).Single(a => a.FullName == m.FullName))).Select(m => m.FullName).ToHashSet();
         Assert.Equal(5, changed.Count); snapshot.Verify(after, changed);
         Assert.DoesNotContain(changed, n => n.Contains("Login") || n.Contains("OAuth") || n.Contains("Secret"));
-        using var pe = new PEReader(File.OpenRead(p));
+        using var pe = new PEReader(new MemoryStream(File.ReadAllBytes(p)));
         Assert.True(pe.HasMetadata);
         var md = pe.GetMetadataReader();
         foreach (var handle in md.MethodDefinitions)
@@ -94,6 +94,32 @@ public sealed class OfficialBinaryTests : IDisposable
         var original = File.ReadAllBytes(p);
         Assert.Throws<InvalidDataException>(() => PatchFile.Patch(p, Donor));
         Assert.Equal(original, File.ReadAllBytes(p)); Assert.False(File.Exists(PatchFile.BackupPath(p)));
+    }
+    [Fact]
+    public void SameMemberNameInDifferentAssemblyIsNotASemanticMatch()
+    {
+        var p = Copy();
+        Rewrite(p, m =>
+        {
+            var method = Il.Find(m, "PCL.ModModpack", "ModpackInstall", 3);
+            var call = method.Body.Instructions.First(i => i.Operand is IMethod member && member.DeclaringType.FullName == "MeloongCore.Logger" && member.Name == "Info");
+            var old = (IMethod)call.Operand;
+            var otherScope = m.GetAssemblyRefs().Single(a => a.Name == "PCLCS");
+            var owner = new TypeRefUser(m, "MeloongCore", "Logger", otherScope);
+            call.Operand = new MemberRefUser(m, old.Name, old.MethodSig, owner);
+        });
+        var original = File.ReadAllBytes(p);
+        Assert.Throws<InvalidDataException>(() => PatchFile.Patch(p, Donor));
+        Assert.Equal(original, File.ReadAllBytes(p));
+    }
+    [Fact]
+    public void ChangedFeatureReturnSignatureRefuses()
+    {
+        var p = Copy();
+        Rewrite(p, m => Il.Find(m, "PCL.PageDownloadInstall", "LoaderInit", 0).MethodSig.RetType = m.CorLibTypes.Int32);
+        var original = File.ReadAllBytes(p);
+        Assert.Throws<InvalidDataException>(() => PatchFile.Patch(p, Donor));
+        Assert.Equal(original, File.ReadAllBytes(p));
     }
     [Fact]
     public void MissingInstallerDependencyRefusesWithoutWriting()
@@ -208,6 +234,50 @@ public sealed class OfficialBinaryTests : IDisposable
         Assert.ThrowsAny<Exception>(() => PatchFile.Patch(p, Donor));
         Assert.Equal(new byte[] { 0x4d, 0x5a }, File.ReadAllBytes(p));
         Assert.False(File.Exists(PatchFile.BackupPath(p)));
+    }
+    private void SeedAutoCache()
+    {
+        var cache = Path.Combine(dir, ".official");
+        Directory.CreateDirectory(cache);
+        File.Copy(Original, Path.Combine(cache, "PCL-2.99.0.0.exe"));
+        File.Copy(Donor, Path.Combine(cache, "PCL-2.14.0.0.exe"));
+    }
+    [Fact]
+    public async Task OneClickPatchesVerifiesLogsAndCanBeRepeatedWithoutNetwork()
+    {
+        SeedAutoCache();
+        var messages = new List<string>();
+        var result = await OneClick.RunAsync(dir, messages.Add);
+        Assert.Equal("patched", result.State);
+        Assert.Equal(Path.Combine(dir, OneClick.LauncherName), result.Path);
+        Assert.Equal(File.ReadAllBytes(Original), File.ReadAllBytes(PatchFile.BackupPath(result.Path)));
+        Assert.Contains(messages, line => line.Contains("[cache] verified"));
+        Assert.Contains(messages, line => line.Contains("[snapshot] captured methods="));
+        Assert.Contains(messages, line => line.Contains("[feature] modpack-dispatch"));
+        Assert.Contains(messages, line => line.Contains("[backup]"));
+        Assert.Contains(messages, line => line.Contains("[auto] COMPLETE"));
+        var before = File.ReadAllBytes(result.Path);
+        Assert.Equal("already-restored", (await OneClick.RunAsync(dir, messages.Add)).State);
+        Assert.Equal(before, File.ReadAllBytes(result.Path));
+    }
+    [Fact]
+    public async Task OneClickRefusesUnknownExistingOutput()
+    {
+        SeedAutoCache();
+        var path = Path.Combine(dir, OneClick.LauncherName);
+        File.WriteAllText(path, "user file");
+        await Assert.ThrowsAsync<InvalidDataException>(() => OneClick.RunAsync(dir));
+        Assert.Equal("user file", File.ReadAllText(path));
+        Assert.False(File.Exists(PatchFile.BackupPath(path)));
+    }
+    [Fact]
+    public async Task OneClickHonorsCancellationBeforePatching()
+    {
+        SeedAutoCache();
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OneClick.RunAsync(dir, cancellation: cancel.Token));
+        Assert.False(File.Exists(Path.Combine(dir, OneClick.LauncherName)));
     }
     public void Dispose() => Directory.Delete(dir, recursive: true);
 }
