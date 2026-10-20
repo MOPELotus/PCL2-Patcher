@@ -38,7 +38,7 @@ dotnet run --project src/PclPatcher.Cli -c Release -- fetch .artifacts/official
 将以下命令中的 `PCL.exe` 换成要处理的官方启动器路径；路径含空格时加引号。运行 `patch` 前关闭 PCL。`--donor` 指限制前官方 2.14.0.0 EXE，用于提供编译器已经删除的方法体，不能用 2.99.0.0 或 PCL CE 代替。
 
 ```sh
-# 只检测，不修改文件
+# 只检测，不修改目标 EXE
 dotnet run --project src/PclPatcher.Cli -c Release -- check PCL.exe --donor .artifacts/official/PCL-2.14.0.0.exe
 
 # 原位修补，自动备份与写后校验

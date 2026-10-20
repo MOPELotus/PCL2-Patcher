@@ -61,6 +61,17 @@ ILSpy 9.1.0.7988 对写后的四个相关类型完成反编译；检查重新出
 
 Windows CI 配置额外执行 .NET Framework 下程序集加载及五个方法的 JIT 准备检查（`scripts/verify-clr.ps1`）；这也不等同于界面或网络操作验收。CI 实际结果见对应提交的 GitHub Actions 记录。
 
+## 双平台 CI 与发行包
+
+提交 `98314712c2f7dd205f85b43baf99d059b4d77dba` 的 [GitHub Actions](https://github.com/MOPELotus/PCL2-Patcher/actions/runs/39400686509) 已全部通过：
+
+- Ubuntu 与 Windows 各 21 项测试通过、零跳过；两平台独立 ILVerify 检查通过，诊断基线一致。
+- 两平台实际执行自动下载/修补流程和重复运行。
+- Windows 构建自带运行时的独立 EXE，并实际执行其自动下载、修补、完整性检查。
+- Windows .NET Framework 加载生成的 PCL EXE，五个恢复方法全部 JIT 准备成功；没有运行页面或网络安装功能。
+
+v0.1.0 Windows ZIP 和独立下载文件直接采用该 CI 运行过的 EXE，SHA-256：`eb094ac94fab7442d9a6375933eca9f29da3b9f441ead37baf0c789ed4587448`。发行包仅含工具、双击脚本、说明及校验文件，未包含官方或修补后的启动器。打包后核对 ZIP 内 EXE 与 CI 原件一致，并验证全部发行文件的 SHA-256；Linux tar.gz 已解压到含空格的路径并实际执行一键脚本通过。
+
 ## 剩余兼容性问题
 
 当前适配器只接受已知五处限制的完整结构及语义等价变体。未来更换编译器、重构安装器/闭包、改名、改变依赖身份、增加其他限制或删除底层方法时可能拒绝；需要取得真实新版 EXE 重新分析。当前没有 GUI；发行包提供独立 CLI 和双击一键脚本。
